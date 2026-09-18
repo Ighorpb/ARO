@@ -27,7 +27,7 @@ class Ears:
         stt: STT,
         loop: asyncio.AbstractEventLoop,
         on_text: Callable[[str], Awaitable[None]],
-        on_state: Callable[[str], Awaitable[None]],
+        on_state: Callable[[str, str | None], Awaitable[None]],
         on_level: Callable[[float], Awaitable[None]],
     ) -> None:
         self.mic = mic
@@ -57,9 +57,10 @@ class Ears:
         self._frame_count = 0
         self._started_at = 0.0
 
-    def start(self, preroll: np.ndarray | None = None, follow_up: bool = False) -> None:
+    def start(self, preroll: np.ndarray | None = None, follow_up: bool = False, source: str = "hotkey") -> None:
         """preroll: áudio já capturado (comando dito junto com a wake word).
-        follow_up: escuta curta depois de uma resposta, sem bipe; desiste rápido se ninguém falar."""
+        follow_up: escuta curta depois de uma resposta, sem bipe; desiste rápido se ninguém falar.
+        source: o que ativou (clap | wake | hotkey | follow_up | barge_in) — vai junto no voice.state."""
         if self._active or self._busy:
             return
         self._reset()
@@ -67,13 +68,14 @@ class Ears:
         self._started_at = time.monotonic()
         self._no_speech_timeout = config.FOLLOW_UP_S if follow_up else config.NO_SPEECH_TIMEOUT_S
         self.follow_up = follow_up
+        self.source = "follow_up" if follow_up else source
         if preroll is not None and len(preroll):
             self._frames.append(preroll.astype(np.float32))
             self._speech_started = True
         self._active = True
         self.mic.subscribe(self._on_frame)
-        self._emit(self.on_state, "hearing" if self._speech_started else "listening")
-        log.info("ouvindo... (limiar %.4f)", self._threshold)
+        self._emit_state("hearing" if self._speech_started else "listening")
+        log.info("ouvindo... (%s, limiar %.4f)", self.source, self._threshold)
 
     def stop(self) -> None:
         """Parada manual (segundo aperto no atalho)."""
@@ -96,7 +98,7 @@ class Ears:
         if rms > self._threshold:
             if not self._speech_started:
                 self._speech_started = True
-                self._emit(self.on_state, "hearing")
+                self._emit_state("hearing")
             self._silence_frames = 0
         elif self._speech_started:
             self._silence_frames += 1
@@ -124,14 +126,14 @@ class Ears:
         duration = len(audio) / config.SAMPLE_RATE
         if not self._speech_started or duration < 0.4:
             log.info("nada ouvido")
-            self._emit(self.on_state, "idle")
+            self._emit_state("idle")
             return
 
         self._busy = True
         self.loop.create_task(self._transcribe(audio))
 
     async def _transcribe(self, audio: np.ndarray) -> None:
-        await self.on_state("transcribing")
+        await self.on_state("transcribing", None)
         try:
             text, no_speech, logprob = await asyncio.to_thread(self.stt.transcribe_detailed, audio)
         except Exception as err:  # noqa: BLE001
@@ -139,7 +141,7 @@ class Ears:
             text, no_speech, logprob = "", 1.0, -9.0
         finally:
             self._busy = False
-        await self.on_state("idle")
+        await self.on_state("idle", None)
         if any(junk in text.lower() for junk in HALLUCINATIONS):
             text = ""
         if text and (no_speech > MAX_NO_SPEECH or (len(text.split()) <= 2 and logprob < MIN_LOGPROB_SHORT)):
@@ -153,3 +155,7 @@ class Ears:
 
     def _emit(self, fn, value) -> None:
         asyncio.run_coroutine_threadsafe(fn(value), self.loop)
+
+    def _emit_state(self, state: str) -> None:
+        source = self.source if state in ("listening", "hearing") else None
+        asyncio.run_coroutine_threadsafe(self.on_state(state, source), self.loop)

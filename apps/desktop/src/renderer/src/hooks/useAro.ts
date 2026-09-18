@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { AroState, RouteSource, ServerEvent, Tier, TranscriptEntry, VoiceState } from "@aro/shared";
+import type { AroState, RouteSource, ServerEvent, Tier, TranscriptEntry, VoiceSource, VoiceState } from "@aro/shared";
 
 const HUB_URL = new URLSearchParams(window.location.search).get("hub") ?? "ws://localhost:7777";
 
@@ -43,6 +43,7 @@ interface State {
   lastModel: string;
   aroState: AroState;
   voiceState: VoiceState;
+  voiceSource: VoiceSource | null;
   voiceLevel: number;
   muted: boolean;
   entries: Entry[];
@@ -65,6 +66,7 @@ const initial: State = {
   lastModel: "",
   aroState: "idle",
   voiceState: "off",
+  voiceSource: null,
   voiceLevel: 0,
   muted: false,
   entries: [],
@@ -181,6 +183,7 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         voiceState: e.state,
+        voiceSource: e.source ?? null,
         voiceLevel: e.state === "listening" || e.state === "hearing" ? state.voiceLevel : 0,
         spoken: e.state === "speaking" ? state.spoken : null,
       };

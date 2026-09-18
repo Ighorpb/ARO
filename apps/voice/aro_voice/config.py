@@ -34,7 +34,8 @@ SAMPLE_RATE = 16000
 # Detecção de fala por energia
 SILENCE_MS = int(os.environ.get("ARO_SILENCE_MS", "700"))
 MAX_RECORD_S = int(os.environ.get("ARO_MAX_RECORD_S", "30"))
-NO_SPEECH_TIMEOUT_S = 6
+# Ativou (palma/wake/atalho) e ninguém falou: desiste depois disso
+NO_SPEECH_TIMEOUT_S = float(os.environ.get("ARO_NO_SPEECH_S", "4"))
 # Conversa continua: depois de responder, fica ouvindo esse tanto sem precisar ativar (0 = off)
 FOLLOW_UP_S = float(os.environ.get("ARO_FOLLOW_UP_S", "4"))
 

@@ -50,9 +50,12 @@ async def main() -> None:
         payload = {"type": "voice.chunk", "text": text, "words": [{"t": round(t, 3), "w": w} for t, w in words]}
         asyncio.run_coroutine_threadsafe(hub.send(payload), loop)
 
-    async def send_state(state: str) -> None:
+    async def send_state(state: str, source: str | None = None) -> None:
         prev, last_state["v"] = last_state["v"], state
-        await hub.send({"type": "voice.state", "state": state})
+        payload: dict = {"type": "voice.state", "state": state}
+        if source:
+            payload["source"] = source
+        await hub.send(payload)
         if state == "transcribing" and config.CHIME_ENABLED and not ears.follow_up:
             threading.Thread(target=chime, args=("end",), daemon=True).start()
         # conversa contínua: ele acabou de falar uma resposta de voz → fica ouvindo um pouco, sem bipe
@@ -70,19 +73,19 @@ async def main() -> None:
 
     # ── ativação ──────────────────────────────────────────────────
 
-    async def listen(with_chime: bool, preroll: np.ndarray | None = None) -> None:
+    async def listen(source: str, with_chime: bool, preroll: np.ndarray | None = None) -> None:
         if ears.busy:
             return
         mouth.stop()
         if with_chime and config.CHIME_ENABLED and preroll is None:
             await asyncio.to_thread(chime)
-        ears.start(preroll=preroll)
+        ears.start(preroll=preroll, source=source)
 
     async def on_clap() -> None:
-        await listen(with_chime=True)
+        await listen("clap", with_chime=True)
 
     async def on_wake(rest: np.ndarray | None) -> None:
-        await listen(with_chime=True, preroll=rest)
+        await listen("wake", with_chime=True, preroll=rest)
 
     # ── eventos do hub ────────────────────────────────────────────
 
@@ -90,7 +93,7 @@ async def main() -> None:
         kind = event.get("type")
 
         if kind == "voice.listen.start":
-            await listen(with_chime=False)
+            await listen("hotkey", with_chime=False)
         elif kind == "voice.listen.stop":
             ears.stop()
         elif kind == "voice.mute":
@@ -162,7 +165,7 @@ async def main() -> None:
             ambient["loud_ms"] = ambient["loud_ms"] + 20 if level >= config.BARGE_IN_LEVEL else 0
             if ambient["loud_ms"] >= config.BARGE_IN_MS:
                 ambient["loud_ms"] = 0
-                asyncio.run_coroutine_threadsafe(listen(with_chime=False), loop)
+                asyncio.run_coroutine_threadsafe(listen("barge_in", with_chime=False), loop)
                 return
 
         if ambient["n"] % 6:

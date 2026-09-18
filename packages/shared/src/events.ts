@@ -8,8 +8,13 @@ export type AroState = "idle" | "thinking" | "speaking" | "tool";
 export type Tier = "fast" | "main" | "deep";
 export type RouteSource = "forced" | "rule" | "classifier" | "fallback" | "voice";
 export type Channel = "text" | "voice";
-/** listening = ativou e espera fala (janela abre aqui); hearing = já detectou fala */
+/** listening = ativou e espera fala; hearing = já detectou fala */
 export type VoiceState = "off" | "idle" | "listening" | "hearing" | "transcribing" | "speaking";
+/**
+ * O que ativou a escuta. Palma e atalho são deliberados (janela abre já no listening);
+ * wake word pode ser alucinação do Whisper, então só abre quando vira hearing.
+ */
+export type VoiceSource = "clap" | "wake" | "hotkey" | "follow_up" | "barge_in";
 export type ClientKind = "desktop" | "voice" | "mobile";
 
 /** Pedidos do core pro "corpo" (desktop/voz): quem souber responder, responde. */
@@ -54,7 +59,7 @@ export type ClientEvent =
   | { type: "voice.listen.stop" }
   | { type: "voice.mute"; muted: boolean }
   // emitidos pelo serviço de voz; o hub repassa pra todos
-  | { type: "voice.state"; state: VoiceState }
+  | { type: "voice.state"; state: VoiceState; source?: VoiceSource }
   | { type: "voice.level"; level: number }
   | { type: "voice.chunk"; text: string; words: { t: number; w: string }[] }
   | SysResult
@@ -76,7 +81,7 @@ export type ServerEvent =
   | { type: "turn.done"; id: string; inputTokens: number; outputTokens: number; costUsd: number }
   | { type: "reminder.fired"; text: string }
   | SysRequest
-  | { type: "voice.state"; state: VoiceState }
+  | { type: "voice.state"; state: VoiceState; source?: VoiceSource }
   | { type: "voice.level"; level: number }
   | { type: "voice.chunk"; text: string; words: { t: number; w: string }[] }
   | { type: "voice.listen.start" }
