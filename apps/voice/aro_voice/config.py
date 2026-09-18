@@ -20,6 +20,9 @@ _load_dotenv(ROOT.parent.parent / ".env")
 
 HUB_URL = os.environ.get("ARO_HUB_URL", f"ws://localhost:{os.environ.get('ARO_PORT', '7777')}")
 
+# Nível de log da voz: info | debug (debug mostra rms de cada impulso — útil pra calibrar palma)
+LOG_LEVEL = os.environ.get("ARO_LOG", "info").upper()
+
 # STT
 WHISPER_MODEL = os.environ.get("ARO_WHISPER_MODEL", "large-v3-turbo")
 WHISPER_DEVICE = os.environ.get("ARO_WHISPER_DEVICE", "auto")  # auto | cuda | cpu

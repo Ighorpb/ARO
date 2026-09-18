@@ -70,6 +70,18 @@ export function App() {
     return () => window.clearTimeout(t);
   }, [aro.compact, quiet, aro.lastActivity, aro.setCompact]);
 
+  // follow-up (escuta depois da resposta) acabou sem ninguém falar → recolhe na hora, sem esperar o timer
+  const prevVoice = useRef<{ state: typeof aro.voiceState; source: typeof aro.voiceSource }>({ state: "off", source: null });
+  useEffect(() => {
+    const prev = prevVoice.current;
+    prevVoice.current = { state: aro.voiceState, source: aro.voiceSource ?? prev.source };
+    const followUpGaveUp = prev.state === "listening" && prev.source === "follow_up" && aro.voiceState === "idle";
+    if (followUpGaveUp && autoExpanded.current && !aro.compact) {
+      autoExpanded.current = false;
+      aro.setCompact(true);
+    }
+  }, [aro.voiceState, aro.voiceSource, aro.compact, aro.setCompact]);
+
   // expandiu/recolheu na mão → não volta sozinho
   const toggleCompactManual = () => {
     autoExpanded.current = false;

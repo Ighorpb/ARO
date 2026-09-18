@@ -33,6 +33,7 @@ class ClapDetector:
         self._prev_rms = 0.0
         self._in_impulse = False
         self._impulse_frames = 0
+        self._impulse_peak = 0.0
         self._claps: list[float] = []
         self._blocked_until = 0.0
         self._t = 0.0  # relógio em segundos, avança por frame
@@ -61,18 +62,26 @@ class ClapDetector:
         threshold = max(self.mic.noise_floor * 10, ABS_MIN) / self.sensitivity
 
         if not self._in_impulse:
-            if rms > threshold and rms > self._prev_rms * ONSET_RATIO:
-                self._in_impulse = True
-                self._impulse_frames = 0
+            if rms > self._prev_rms * ONSET_RATIO and rms > threshold * 0.4:
+                if rms > threshold:
+                    self._in_impulse = True
+                    self._impulse_frames = 0
+                    self._impulse_peak = rms
+                else:
+                    # calibração: ARO_LOG=debug mostra quão perto do limiar a palma chegou
+                    log.debug("impulso fraco: rms %.3f < limiar %.3f", rms, threshold)
         else:
             self._impulse_frames += 1
+            self._impulse_peak = max(self._impulse_peak, rms)
             if rms < threshold * 0.35:
                 self._in_impulse = False
                 if self._impulse_frames * FRAME_MS <= MAX_IMPULSE_MS:
+                    log.debug("impulso: pico %.3f, %dms (limiar %.3f)", self._impulse_peak, self._impulse_frames * FRAME_MS, threshold)
                     self._register(now)
             elif self._impulse_frames * FRAME_MS > MAX_IMPULSE_MS:
                 # som sustentado (voz, ruído) — não é palma
                 self._in_impulse = False
+                log.debug("som sustentado descartado: pico %.3f", self._impulse_peak)
 
         self._prev_rms = rms
 

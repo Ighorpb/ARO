@@ -19,7 +19,7 @@ from aro_voice.system import WindowWatcher, media
 from aro_voice.tts import create_tts
 from aro_voice.wake import WakeWord
 
-logging.basicConfig(level=logging.INFO, format="[%(name)s] %(message)s")
+logging.basicConfig(level=config.LOG_LEVEL, format="[%(name)s] %(message)s")
 for noisy in ("httpx", "huggingface_hub", "faster_whisper", "phonemizer"):
     logging.getLogger(noisy).setLevel(logging.WARNING)
 log = logging.getLogger("voice")
