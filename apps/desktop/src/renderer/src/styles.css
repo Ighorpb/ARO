@@ -1,0 +1,567 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #101219;
+  --color-ink-soft: #1a1d27;
+  --color-thought: #8fa3c7;
+  --color-thought-dim: #5c6b87;
+  --color-voice: #e8b86d;
+  --color-voice-deep: #b8863a;
+  --color-you: #e6e4de;
+  --color-mute: #6b6f7c;
+  --color-line: rgba(230, 228, 222, 0.08);
+  --color-alert: #d9736a;
+
+  --font-voice: "Instrument Serif", "Georgia", serif;
+  --font-ui: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--color-you);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* ── Painel: vidro escuro sobre o desktop ─────────────────────── */
+
+.pane {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: rgba(16, 18, 25, 0.9);
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  transition: background-color 0.45s ease;
+}
+.pane[data-compact="true"] {
+  background: rgba(16, 18, 25, 0);
+}
+.header,
+.stage,
+.dock {
+  transition: opacity 0.35s ease;
+}
+.pane[data-compact="true"] .header,
+.pane[data-compact="true"] .stage,
+.pane[data-compact="true"] .dock {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* chrome (header) só aparece com o mouse sobre a janela */
+.chrome {
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.pane:hover .chrome,
+.chrome:focus-within {
+  opacity: 1;
+}
+
+/* ── Palco ─────────────────────────────────────────────────────── */
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(40px, 0.7fr) auto auto minmax(0, 1.3fr);
+  justify-items: center;
+  align-items: center;
+  padding: 0 40px;
+}
+
+.orb-canvas {
+  display: block;
+  pointer-events: none;
+}
+
+.orb-slot {
+  grid-row: 2;
+}
+
+.heard {
+  grid-row: 1;
+  align-self: end;
+  margin: 0 0 6px;
+  max-width: 56ch;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-you);
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s ease;
+}
+.heard[data-show="true"] {
+  opacity: 0.55;
+  transform: translateY(0);
+}
+
+.status {
+  grid-row: 3;
+  margin: 2px 0 0;
+  min-height: 18px;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--color-mute);
+}
+
+.captions {
+  grid-row: 4;
+  align-self: stretch;
+  width: 100%;
+  max-width: 64ch;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 18px 0 12px;
+  text-align: center;
+  mask-image: linear-gradient(to bottom, transparent, black 22px, black calc(100% - 10px), transparent);
+}
+
+.caption-thought {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  user-select: text;
+}
+.caption-thought[data-show="true"] {
+  opacity: 0.85;
+}
+
+.caption {
+  margin: 0;
+  font-family: var(--font-voice);
+  font-size: 23px;
+  line-height: 1.32;
+  color: var(--color-voice);
+  white-space: pre-wrap;
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s ease;
+  user-select: text;
+}
+.caption[data-show="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+.caption-alert {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--color-alert);
+}
+.caption-reminder {
+  color: #f2d8a4;
+}
+
+.thought {
+  color: var(--color-thought);
+  font-style: italic;
+  white-space: pre-wrap;
+}
+
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 0.9em;
+  margin-left: 3px;
+  vertical-align: -0.1em;
+  background: currentColor;
+  animation: caret 1s steps(2) infinite;
+}
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret {
+    animation: none;
+  }
+  .caption,
+  .heard,
+  .caption-thought,
+  .chrome {
+    transition: none;
+  }
+}
+
+/* ── Dock: mic + texto sob demanda ─────────────────────────────── */
+
+.dock {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 24px 22px;
+  min-height: 72px;
+}
+
+.dock-hint {
+  align-self: center;
+  font-size: 11.5px;
+  color: var(--color-mute);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.pane:hover .dock-hint {
+  opacity: 0.7;
+}
+
+.dock-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  width: min(560px, 100%);
+  padding: 6px 6px 6px 16px;
+  border: 1px solid var(--color-line);
+  border-radius: 22px;
+  background: rgba(230, 228, 222, 0.03);
+}
+
+.dock-form textarea {
+  flex: 1;
+  resize: none;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--color-you);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.45;
+  max-height: 120px;
+  padding: 6px 0;
+}
+.dock-form textarea::placeholder {
+  color: var(--color-mute);
+}
+
+.mic,
+.send {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--color-line);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.mic {
+  color: var(--color-thought);
+}
+.mic:hover:not(:disabled) {
+  background: rgba(143, 163, 199, 0.1);
+  border-color: rgba(143, 163, 199, 0.35);
+}
+.mic:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.mic[data-state="listening"],
+.mic[data-state="hearing"] {
+  color: #dbe7f0;
+  border-color: rgba(219, 231, 240, 0.6);
+  background: rgba(219, 231, 240, 0.08);
+}
+.mic[data-state="speaking"] {
+  color: var(--color-voice);
+}
+.mic:focus-visible {
+  outline: 1px solid var(--color-thought);
+  outline-offset: 2px;
+}
+
+.send {
+  width: 32px;
+  height: 32px;
+  color: var(--color-voice);
+}
+.send:hover:not(:disabled) {
+  background: rgba(232, 184, 109, 0.1);
+  border-color: rgba(232, 184, 109, 0.35);
+}
+.send:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.send:focus-visible {
+  outline: 1px solid var(--color-voice);
+  outline-offset: 2px;
+}
+
+/* ── Header ────────────────────────────────────────────────────── */
+
+.wordmark {
+  font-family: var(--font-voice);
+  font-style: italic;
+  font-size: 17px;
+  color: var(--color-voice);
+  letter-spacing: 0.02em;
+}
+
+.meta {
+  font-size: 11px;
+  color: var(--color-mute);
+}
+
+.win-btn {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  background: transparent;
+  color: var(--color-mute);
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.win-btn:hover {
+  background: rgba(230, 228, 222, 0.06);
+  color: var(--color-you);
+}
+.win-btn[data-active="true"] {
+  color: var(--color-voice);
+}
+.win-btn:focus-visible {
+  outline: 1px solid var(--color-mute);
+}
+
+/* ── Karaokê: palavra acende quando ele fala ───────────────────── */
+
+.caption .w {
+  opacity: 0.38;
+  transition: opacity 0.18s ease;
+}
+.caption .w.said {
+  opacity: 1;
+}
+
+/* ── Camada do orb: anda e encolhe por transform (liso) ─────────── */
+
+.orb-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.orb-box {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: center;
+  will-change: transform;
+  transition: transform 0.5s cubic-bezier(0.22, 0.9, 0.25, 1);
+  pointer-events: auto;
+  touch-action: none;
+}
+.orb-layer[data-compact="true"] .orb-box {
+  cursor: grab;
+}
+.orb-layer[data-dragging="true"] .orb-box {
+  transition: none;
+  cursor: grabbing;
+}
+
+.orb-float {
+  position: absolute;
+  inset: 0;
+  animation: orb-float 9s ease-in-out infinite;
+}
+@keyframes orb-float {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  30% {
+    transform: translate(3px, -4px);
+  }
+  65% {
+    transform: translate(-3px, 3px);
+  }
+}
+.orb-float .orb-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.orbit {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  animation: orbit-spin 6s linear infinite;
+}
+.orbit-item {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #dbe7f0;
+  background: rgba(16, 18, 25, 0.7);
+  border: 1px solid rgba(219, 231, 240, 0.35);
+  transform: rotate(calc(var(--i) * 360deg / var(--n))) translateX(var(--r)) rotate(calc(var(--i) * -360deg / var(--n)));
+  animation: orbit-counter 6s linear infinite;
+}
+@keyframes orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes orbit-counter {
+  /* mantém o ícone em pé enquanto o anel gira */
+  from {
+    transform: rotate(calc(var(--i) * 360deg / var(--n))) translateX(var(--r)) rotate(calc(var(--i) * -360deg / var(--n)));
+  }
+  to {
+    transform: rotate(calc(var(--i) * 360deg / var(--n))) translateX(var(--r)) rotate(calc(var(--i) * -360deg / var(--n) - 360deg));
+  }
+}
+
+.spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: #fff3d0;
+  box-shadow:
+    0 0 10px 2px var(--color-voice),
+    0 0 24px 6px rgba(232, 184, 109, 0.45);
+  pointer-events: none;
+  animation: spark-fly 1.6s cubic-bezier(0.1, 0.6, 0.3, 1) forwards;
+}
+@keyframes spark-fly {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--angle)) translateX(110px) scale(0.5);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--angle)) translateX(calc(var(--dist) + 110px)) scale(0.3);
+  }
+}
+
+/* ── Minimalista: controles aparecem com o cursor no orb ───────── */
+
+.mini-controls {
+  position: absolute;
+  left: 0;
+  top: 0;
+  margin-left: -34px;
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.25s ease,
+    transform 0.5s cubic-bezier(0.22, 0.9, 0.25, 1);
+}
+.orb-layer[data-compact="true"][data-hover="true"] .mini-controls,
+.mini-controls:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mini-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(230, 228, 222, 0.16);
+  background: rgba(16, 18, 25, 0.82);
+  color: var(--color-thought);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+.mini-btn:hover:not(:disabled) {
+  color: var(--color-you);
+  border-color: rgba(230, 228, 222, 0.35);
+}
+.mini-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.mini-btn[data-state="listening"],
+.mini-btn[data-state="hearing"] {
+  color: #dbe7f0;
+  border-color: rgba(219, 231, 240, 0.6);
+}
+.mini-btn:focus-visible {
+  outline: 1px solid var(--color-thought);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit,
+  .orbit-item,
+  .spark,
+  .orb-float {
+    animation: none;
+  }
+  .orb-box,
+  .mini-controls,
+  .pane,
+  .header,
+  .stage,
+  .dock {
+    transition: none;
+  }
+}

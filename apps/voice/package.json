@@ -1,0 +1,10 @@
+{
+  "name": "@aro/voice",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "setup": "powershell -NoProfile -ExecutionPolicy Bypass -File setup.ps1",
+    "dev": ".venv\\Scripts\\python.exe main.py",
+    "start": ".venv\\Scripts\\python.exe main.py"
+  }
+}

@@ -1,0 +1,5 @@
+.venv/
+models/*.onnx
+models/*.bin
+__pycache__/
+models/*.wav

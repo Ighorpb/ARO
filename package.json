@@ -1,0 +1,22 @@
+{
+  "name": "aro",
+  "private": true,
+  "version": "0.1.0",
+  "description": "ARO — assistente pessoal local com Claude",
+  "scripts": {
+    "dev": "pnpm --filter @aro/core --filter @aro/desktop --parallel --no-bail run dev",
+    "dev:all": "pnpm -r --parallel --no-bail run dev",
+    "dev:core": "pnpm --filter @aro/core dev",
+    "dev:desktop": "pnpm --filter @aro/desktop dev",
+    "dev:voice": "pnpm --filter @aro/voice dev",
+    "setup:voice": "pnpm --filter @aro/voice setup",
+    "typecheck": "pnpm -r run typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@9.15.9"
+}

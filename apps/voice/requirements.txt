@@ -1,0 +1,8 @@
+websockets>=13
+sounddevice>=0.5
+numpy>=1.26
+faster-whisper>=1.1
+nvidia-cublas-cu12
+nvidia-cudnn-cu12==9.*
+kokoro-onnx>=0.4
+edge-tts>=7
