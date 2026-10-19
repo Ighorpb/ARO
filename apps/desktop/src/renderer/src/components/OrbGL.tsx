@@ -166,6 +166,8 @@ export function OrbGL({ state, level, intensity, mood = 0, size }: Props) {
     let blink = 0;
     let nextBlink = performance.now() + 3000 + Math.random() * 4000;
     const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
+    const rootStyle = document.documentElement.style;
+    let lastLight = "";
     let time = 0;
     let last = performance.now();
     let raf = 0;
@@ -233,6 +235,13 @@ export function OrbGL({ state, level, intensity, mood = 0, size }: Props) {
       gl.uniform1f(loc.blink, blink);
       gl.uniform1f(loc.breath, cur.breath);
       gl.uniform2f(loc.pointer, pointer.x, pointer.y);
+
+      // luz que vaza no fundo do palco (styles.css .pane::before); só escreve quando muda
+      const light = `${cur.a.map((c) => Math.round(c * 255)).join(" ")} / ${(cur.glow * 0.3).toFixed(2)}`;
+      if (light !== lastLight) {
+        lastLight = light;
+        rootStyle.setProperty("--orb-light", light);
+      }
 
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);

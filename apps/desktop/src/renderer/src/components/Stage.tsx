@@ -15,6 +15,7 @@ interface Props {
 }
 
 interface Caption {
+  id: string;
   kind: "answer" | "alert" | "reminder";
   text: string;
   at: number;
@@ -121,9 +122,9 @@ function useSaidCount(captionText: string, captionKey: string, spoken: SpokenChu
   return said;
 }
 
+/** Cada palavra entra sozinha (blur → nítido) conforme chega; com karaokê, o que falta falar fica apagado. */
 function Words({ text, said }: { text: string; said: number | null }) {
   const pieces = useMemo(() => text.split(/(\s+)/), [text]);
-  if (said === null) return <>{text}</>;
   let index = 0;
   return (
     <>
@@ -131,7 +132,7 @@ function Words({ text, said }: { text: string; said: number | null }) {
         if (piece === "" || /^\s+$/.test(piece)) return piece;
         const k = index++;
         return (
-          <span key={i} className={k < said ? "w said" : "w"}>
+          <span key={i} className={said !== null && k >= said ? "w dim" : "w"}>
             {piece}
           </span>
         );
@@ -152,9 +153,9 @@ export function Stage({ slotRef, orbState, voiceState, live, entries, connected,
     if (!lastEntry) return;
     const at = Date.now();
     if (lastEntry.role === "user") setHeard({ text: lastEntry.text, at });
-    else if (lastEntry.role === "aro") setCaption({ kind: "answer", text: lastEntry.text, at });
-    else if (lastEntry.role === "alert") setCaption({ kind: "alert", text: lastEntry.text, at });
-    else if (lastEntry.role === "reminder") setCaption({ kind: "reminder", text: `Lembrete: ${lastEntry.text}`, at });
+    else if (lastEntry.role === "aro") setCaption({ id: lastEntry.id, kind: "answer", text: lastEntry.text, at });
+    else if (lastEntry.role === "alert") setCaption({ id: lastEntry.id, kind: "alert", text: lastEntry.text, at });
+    else if (lastEntry.role === "reminder") setCaption({ id: lastEntry.id, kind: "reminder", text: `Lembrete: ${lastEntry.text}`, at });
   }, [lastEntry?.id]);
 
   useEffect(() => {
@@ -178,7 +179,7 @@ export function Stage({ slotRef, orbState, voiceState, live, entries, connected,
   }, [live, voiceState]);
 
   const thinkingLive = Boolean(live && live.thinking && !live.text);
-  const answer = live?.text ? { kind: "answer" as const, text: live.text, at: 0 } : caption;
+  const answer = live?.text ? { id: live.id, kind: "answer" as const, text: live.text, at: 0 } : caption;
   const thought = thinkingLive ? live!.thinking.slice(-THOUGHT_TAIL) : "";
   const captionKey = live?.id ?? `${caption?.at ?? 0}`;
   const said = useSaidCount(answer?.text ?? "", captionKey, spoken);
@@ -206,7 +207,7 @@ export function Stage({ slotRef, orbState, voiceState, live, entries, connected,
           {thought && <span className="caret" />}
         </p>
         <p className={`caption caption-${answer?.kind ?? "answer"}`} data-show={String(Boolean(answer))} aria-live="polite">
-          {answer && <Words text={answer.text} said={answer.kind === "answer" ? said : null} />}
+          {answer && <Words key={answer.id} text={answer.text} said={answer.kind === "answer" ? said : null} />}
           {live?.text && <span className="caret" />}
         </p>
       </div>

@@ -11,6 +11,7 @@ const MINI_SCALE = 0.46;
 const MINI_MARGIN = 24;
 const HIT_RADIUS = 118; // raio clicável no minimalista (orb + um pouco do halo)
 const POS_KEY = "aro.orbPos";
+const FOLLOW_MAX = 22;
 
 interface Spark {
   id: number;
@@ -92,6 +93,7 @@ export function OrbLayer({
   const [hover, setHover] = useState(false);
   const [sparks, setSparks] = useState<Spark[]>([]);
   const controlsRef = useRef<HTMLDivElement>(null);
+  const followRef = useRef<HTMLDivElement>(null);
   const ignoring = useRef<boolean | null>(null);
   const drag = useRef<{ start: Point; origin: Point; moved: boolean } | null>(null);
 
@@ -112,6 +114,12 @@ export function OrbLayer({
       window.removeEventListener("resize", measure);
     };
   }, [slotRef]);
+
+  useEffect(() => {
+    const root = document.documentElement.style;
+    root.setProperty("--orb-x", `${slotCenter.x}px`);
+    root.setProperty("--orb-y", `${slotCenter.y}px`);
+  }, [slotCenter]);
 
   useEffect(() => {
     const onResize = () => setMiniPos((p) => clampToWindow(p));
@@ -168,6 +176,34 @@ export function OrbLayer({
     };
   }, [compact, miniPos, applyIgnore]);
 
+  // modo cheio: acompanha o cursor de leve (até FOLLOW_MAX px, satura com a distância)
+  useEffect(() => {
+    const el = followRef.current;
+    if (!el) return;
+    const place = (x: number, y: number) => {
+      el.style.transform = `translate(${x}px, ${y}px)`;
+    };
+    if (compact || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      place(0, 0);
+      return;
+    }
+    const onMove = (e: MouseEvent) => {
+      const dx = e.clientX - slotCenter.x;
+      const dy = e.clientY - slotCenter.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 1) return place(0, 0);
+      const k = (FOLLOW_MAX * Math.tanh(len / 500)) / len;
+      place(dx * k, dy * k);
+    };
+    const onLeave = () => place(0, 0);
+    window.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseleave", onLeave);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseleave", onLeave);
+    };
+  }, [compact, slotCenter]);
+
   // arrastar o orb no minimalista
   const onPointerDown = (e: React.PointerEvent) => {
     if (!compact || e.button !== 0) return;
@@ -221,25 +257,27 @@ export function OrbLayer({
           if (!drag.current?.moved) onToggleCompact();
         }}
       >
-        <div className="orb-float">
-          {gl ? (
-            <OrbGL state={orbState} level={level} intensity={intensity} mood={mood} size={ORB_SIZE} />
-          ) : (
-            <OrbCanvas state={orbState} level={level} intensity={intensity} size={ORB_SIZE} />
-          )}
-        </div>
-        {pending.length > 0 && (
-          <div className="orbit" style={{ "--n": pending.length, "--r": `${ORB_SIZE * 0.62}px` } as CSSProperties}>
-            {pending.map((t, i) => (
-              <span key={t.toolId} className="orbit-item" style={{ "--i": i } as CSSProperties} title={t.name}>
-                <ToolIcon name={t.name} />
-              </span>
-            ))}
+        <div ref={followRef} className="orb-follow">
+          <div className="orb-float">
+            {gl ? (
+              <OrbGL state={orbState} level={level} intensity={intensity} mood={mood} size={ORB_SIZE} />
+            ) : (
+              <OrbCanvas state={orbState} level={level} intensity={intensity} size={ORB_SIZE} />
+            )}
           </div>
-        )}
-        {sparks.map((s) => (
-          <span key={s.id} className="spark" style={{ "--angle": `${s.angle}deg`, "--dist": `${s.dist}px` } as CSSProperties} />
-        ))}
+          {pending.length > 0 && (
+            <div className="orbit" style={{ "--n": pending.length, "--r": `${ORB_SIZE * 0.62}px` } as CSSProperties}>
+              {pending.map((t, i) => (
+                <span key={t.toolId} className="orbit-item" style={{ "--i": i } as CSSProperties} title={t.name}>
+                  <ToolIcon name={t.name} />
+                </span>
+              ))}
+            </div>
+          )}
+          {sparks.map((s) => (
+            <span key={s.id} className="spark" style={{ "--angle": `${s.angle}deg`, "--dist": `${s.dist}px` } as CSSProperties} />
+          ))}
+        </div>
       </div>
 
       <div ref={controlsRef} className="mini-controls" style={controlsStyle}>

@@ -77,6 +77,7 @@ uniform float u_blink;     // pulso curto de brilho (0..1)
 uniform float u_breath;    // ciclo de respiração em segundos
 uniform vec2  u_pointer;   // direção do cursor (-1..1)
 ${SNOISE}
+float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 
 void main() {
   vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / (0.5 * u_res);
@@ -117,6 +118,16 @@ void main() {
   float rim = pow(1.0 - z, 3.0);
   col += mix(u_a, u_core, 0.4) * rim * 0.5;
 
+  // vidro: reflexo no alto-esquerda (segue o cursor de leve) e borda iridescente.
+  // estados apagados (offline, dormindo) quase não brilham
+  float lit = smoothstep(0.1, 0.5, u_glow);
+  vec3 N = normalize(vec3(uv / R, z));
+  vec3 L = normalize(vec3(-0.45 + u_pointer.x * 0.35, 0.55 + u_pointer.y * 0.35, 0.8));
+  float nh = max(dot(N, normalize(L + vec3(0.0, 0.0, 1.0))), 0.0);
+  col += u_core * (pow(nh, 48.0) * 0.45 + pow(nh, 6.0) * 0.06) * lit;
+  vec3 iri = 0.5 + 0.5 * cos(6.2831853 * (rim * 0.7 + u_time * 0.04 + vec3(0.0, 0.33, 0.67)));
+  col += iri * rim * 0.14 * lit;
+
   // pulso de brilho (piscada) e áudio
   col *= 0.98 + u_blink * 0.25 + u_level * 0.2;
 
@@ -140,6 +151,8 @@ void main() {
     alpha = max(alpha, ring * 0.9);
   }
 
-  o = vec4(outc, alpha);
+  // dithering: halo escuro sobre fundo escuro faz degrau sem isso
+  float dither = (hash(gl_FragCoord.xy) - 0.5) * (1.5 / 255.0);
+  o = vec4(outc + dither * alpha, alpha);
 }
 `;
