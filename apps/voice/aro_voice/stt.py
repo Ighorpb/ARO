@@ -28,6 +28,14 @@ _add_nvidia_dlls()
 from faster_whisper import WhisperModel  # noqa: E402
 
 
+def normalize(audio: np.ndarray, target: float = 0.5, max_gain: float = 10.0) -> np.ndarray:
+    """Mic com ganho baixo: sobe o volume antes do Whisper, senão o VAD descarta a fala inteira."""
+    peak = float(np.abs(audio).max()) if len(audio) else 0.0
+    if peak <= 0 or peak >= target:
+        return audio
+    return audio * min(target / peak, max_gain)
+
+
 class STT:
     def __init__(self) -> None:
         self.model = self._load()
@@ -58,6 +66,7 @@ class STT:
 
     def transcribe_detailed(self, audio: np.ndarray) -> tuple[str, float, float]:
         """(texto, no_speech_prob maximo, avg_logprob minimo) — pra descartar transcricao duvidosa."""
+        audio = normalize(audio)
         segments, _ = self.model.transcribe(
             audio,
             language="pt",

@@ -11,10 +11,10 @@ export type Channel = "text" | "voice";
 /** listening = ativou e espera fala; hearing = já detectou fala */
 export type VoiceState = "off" | "idle" | "listening" | "hearing" | "transcribing" | "speaking";
 /**
- * O que ativou a escuta. Palma e atalho são deliberados (janela abre já no listening);
+ * O que ativou a escuta. Atalho é deliberado (janela abre já no listening);
  * wake word pode ser alucinação do Whisper, então só abre quando vira hearing.
  */
-export type VoiceSource = "clap" | "wake" | "hotkey" | "follow_up" | "barge_in";
+export type VoiceSource = "wake" | "hotkey" | "follow_up" | "barge_in";
 export type ClientKind = "desktop" | "voice" | "mobile";
 
 /** Pedidos do core pro "corpo" (desktop/voz): quem souber responder, responde. */

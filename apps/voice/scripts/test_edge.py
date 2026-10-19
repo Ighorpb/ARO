@@ -21,7 +21,8 @@ for voice in VOICES:
     tts.voice = voice
     t = time.time()
     try:
-        samples, rate = tts.synthesize(TEXT)
+        speech = tts.synthesize(TEXT)
+        samples, rate = speech.samples, speech.rate
     except Exception as err:
         print(f"{voice}: falhou ({err})")
         continue

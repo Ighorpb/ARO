@@ -5,13 +5,13 @@ import { system } from "../system";
 export const seeScreenTool = betaZodTool({
   name: "see_screen",
   description:
-    "Tira um print da tela do chefe e devolve a imagem pra você olhar. Use quando ele perguntar sobre algo que está vendo, um erro, o que fazer numa tela, ou pedir pra você olhar. Custa um pouco — não use à toa.",
+    "Tira um print da tela do Ighor e devolve a imagem pra você olhar. Use quando ele perguntar sobre algo que está vendo, um erro, o que fazer numa tela, ou pedir pra você olhar. Custa um pouco — não use à toa.",
   inputSchema: z.object({}),
   run: async () => {
     const r = await system.request("screen", undefined, 8000);
     if (!r.ok || !r.data) return `Não consegui ver a tela: ${r.error ?? "sem imagem"}.`;
     return [
-      { type: "text" as const, text: "Print da tela do chefe agora:" },
+      { type: "text" as const, text: "Print da tela do Ighor agora:" },
       { type: "image" as const, source: { type: "base64" as const, media_type: "image/jpeg" as const, data: r.data } },
     ];
   },
@@ -19,7 +19,7 @@ export const seeScreenTool = betaZodTool({
 
 export const clipboardTool = betaZodTool({
   name: "read_clipboard",
-  description: "Lê o texto que o chefe copiou (área de transferência). Use quando ele disser 'isso que eu copiei', 'resume isso', 'traduz isso' sem colar nada.",
+  description: "Lê o texto que o Ighor copiou (área de transferência). Use quando ele disser 'isso que eu copiei', 'resume isso', 'traduz isso' sem colar nada.",
   inputSchema: z.object({}),
   run: async () => {
     const r = await system.request("clipboard");

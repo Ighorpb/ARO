@@ -1,4 +1,6 @@
 import { EventEmitter } from "node:events";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
 import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaMemoryTool } from "@anthropic-ai/sdk/helpers/beta/memory";
@@ -47,6 +49,7 @@ export class Aro extends EventEmitter<{ event: [ServerEvent] }> {
   private tools: BetaRunnableTool<any>[] = [];
   private busy = false;
   private currentTurn = "";
+  private memorySnapshot = "";
 
   constructor(
     private session: Session,
@@ -57,6 +60,7 @@ export class Aro extends EventEmitter<{ event: [ServerEvent] }> {
 
   async init() {
     const memoryFs = await BetaLocalFilesystemMemoryTool.init(config.memoryDir);
+    this.memorySnapshot = await snapshotMemory(config.memoryDir);
     const emit: Emit = (e) => this.emit("event", e);
     const turnId = () => this.currentTurn;
 
@@ -108,7 +112,7 @@ export class Aro extends EventEmitter<{ event: [ServerEvent] }> {
     try {
       chosen = await route(this.client, text, recent, channel);
       costUsd += chosen.costUsd;
-      console.log(`[router] ${chosen.tier} (${chosen.source}${chosen.reason ? `: ${chosen.reason}` : ""})`);
+      console.log(`[router] ${chosen.tier} → ${chosen.model} em ${Date.now() - startedAt}ms (${chosen.source}${chosen.reason ? `: ${chosen.reason}` : ""})`);
       this.emit("event", {
         type: "turn.start",
         id,
@@ -120,13 +124,16 @@ export class Aro extends EventEmitter<{ event: [ServerEvent] }> {
       });
 
       const runner = this.client.beta.messages.toolRunner({
-        ...tierRequestParams(chosen.tier),
+        ...tierRequestParams(chosen.tier, channel),
         max_tokens: 64000,
         stream: true,
         context_management: { edits: [{ type: "compact_20260112" }] },
         // prefixo fixo (tools + system) com breakpoint explícito; conversa cresce com breakpoint automático
         cache_control: { type: "ephemeral", ttl: config.cacheTtl },
-        system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral", ttl: config.cacheTtl } }],
+        system: [
+          { type: "text", text: SYSTEM_PROMPT },
+          { type: "text", text: this.memorySnapshot, cache_control: { type: "ephemeral", ttl: config.cacheTtl } },
+        ],
         tools: [...this.tools, { type: "web_search_20260209", name: "web_search", max_uses: 5 }],
         messages: [...this.session.messages, { role: "user", content: `${this.stampFor(channel)} ${text}` }],
         max_iterations: 15,
@@ -182,7 +189,7 @@ export class Aro extends EventEmitter<{ event: [ServerEvent] }> {
       this.session.setMessages([...runner.params.messages]);
       this.session.addTranscript({ id, role: "aro", text: answer, thinking: thinking || undefined, thinkingMs: thinking ? (firstTextAt || Date.now()) - startedAt : undefined, tier: chosen.tier, model: chosen.model, costUsd, at: Date.now() });
       await this.session.save();
-      console.log(`[aro] turno ${fmtUsd(costUsd)}`);
+      console.log(`[aro] turno ${fmtUsd(costUsd)} · 1º texto ${firstTextAt ? firstTextAt - startedAt : "-"}ms · total ${Date.now() - startedAt}ms`);
       this.emit("event", { type: "turn.done", id, inputTokens, outputTokens, costUsd });
     } catch (err) {
       const message = describeError(err);
@@ -194,6 +201,23 @@ export class Aro extends EventEmitter<{ event: [ServerEvent] }> {
       this.emit("event", { type: "state", state: "idle" });
     }
   }
+}
+
+/**
+ * Foto de /memories ao subir o core: vai no system prompt pra ele não gastar uma ida e volta
+ * com `view` antes de responder. Fixa durante a sessão (não invalida cache); o que ele salva
+ * depois já está no histórico da conversa.
+ */
+async function snapshotMemory(memoryDir: string): Promise<string> {
+  const root = path.join(memoryDir, "memories");
+  const files = await readdir(root, { recursive: true, withFileTypes: true }).catch(() => []);
+  const parts: string[] = [];
+  for (const f of files.filter((f) => f.isFile())) {
+    const full = path.join(f.parentPath, f.name);
+    const rel = path.relative(root, full).replaceAll("\\", "/");
+    parts.push(`<arquivo path="/memories/${rel}">\n${(await readFile(full, "utf8")).slice(0, 20_000)}\n</arquivo>`);
+  }
+  return parts.length ? `Memória (/memories ao ligar):\n${parts.join("\n")}` : "Memória: /memories está vazio.";
 }
 
 /** Carimbo curto de data/hora local, ex: "qua 16/09/2026 19:04" */

@@ -89,9 +89,15 @@ def create_tts() -> TTSEngine:
     from .tts_kokoro import KokoroTTS
 
     kokoro = KokoroTTS()
-    if config.TTS_ENGINE != "edge":
+    if config.TTS_ENGINE not in ("edge", "elevenlabs"):
         return kokoro
 
     from .tts_edge import EdgeTTS
 
-    return FallbackTTS(EdgeTTS(), kokoro, "edge", "kokoro")
+    edge = FallbackTTS(EdgeTTS(), kokoro, "edge", "kokoro")
+    if config.TTS_ENGINE != "elevenlabs":
+        return edge
+
+    from .tts_eleven import ElevenTTS
+
+    return FallbackTTS(ElevenTTS(), edge, "elevenlabs", "edge")

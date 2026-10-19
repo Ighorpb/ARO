@@ -1,3 +1,5 @@
+import type { Channel } from "@aro/shared";
+
 export type Tier = "fast" | "main" | "deep";
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -27,6 +29,19 @@ export const TIERS: Record<Tier, TierProfile> = {
   },
 };
 
+/**
+ * Turno de voz no tier main: Sonnet pensando pouco. Opus pensando levava ~24s pra uma frase falada.
+ * Deep continua no Opus (tem filler falado enquanto pensa).
+ */
+const VOICE_MAIN: TierProfile = {
+  model: process.env.ARO_MODEL_VOICE ?? "claude-sonnet-5",
+  effort: effort(process.env.ARO_EFFORT_VOICE, "low"),
+};
+
+export function profileFor(tier: Tier, channel: Channel): TierProfile {
+  return channel === "voice" && tier === "main" ? VOICE_MAIN : TIERS[tier];
+}
+
 export const CLASSIFIER_MODEL = process.env.ARO_MODEL_CLASSIFIER ?? "claude-haiku-4-5";
 
 /** Tier rápido sem thinking: hora/clima/nota respondem na hora. ARO_FAST_THINKING=on liga de volta. */
@@ -42,8 +57,8 @@ export const FORCED_TIER: Tier | null = (() => {
  * Parâmetros de request que variam por modelo.
  * Fallback server-side só existe pro Opus 5; compaction vale pros dois.
  */
-export function tierRequestParams(tier: Tier) {
-  const { model, effort } = TIERS[tier];
+export function tierRequestParams(tier: Tier, channel: Channel) {
+  const { model, effort } = profileFor(tier, channel);
   const isOpus = model.startsWith("claude-opus");
   const noThinking = tier === "fast" && !FAST_THINKING && !isOpus;
   return {

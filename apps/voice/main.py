@@ -4,12 +4,12 @@ import asyncio
 import logging
 import math
 import threading
+import time
 
 import numpy as np
 
 from aro_voice import config
 from aro_voice.audio import chime, select_devices
-from aro_voice.clap import ClapDetector
 from aro_voice.ears import Ears
 from aro_voice.hub import HubClient
 from aro_voice.mic import Mic
@@ -37,6 +37,7 @@ async def main() -> None:
     mouth: Mouth
     turn = {"channel": "text", "done": True, "tier": "main"}
     last_state = {"v": "idle"}
+    heard_at = {"speech_end": 0.0}
 
     # ── saída pro hub ─────────────────────────────────────────────
 
@@ -56,6 +57,9 @@ async def main() -> None:
         if source:
             payload["source"] = source
         await hub.send(payload)
+        if state == "speaking" and heard_at["speech_end"]:
+            log.info("fim da fala → voz do ARO: %dms", (time.monotonic() - heard_at["speech_end"]) * 1000)
+            heard_at["speech_end"] = 0.0
         if state == "transcribing" and config.CHIME_ENABLED and not ears.follow_up:
             threading.Thread(target=chime, args=("end",), daemon=True).start()
         # conversa contínua: ele acabou de falar uma resposta de voz → fica ouvindo um pouco, sem bipe
@@ -66,6 +70,7 @@ async def main() -> None:
         await hub.send({"type": "voice.level", "level": level})
 
     async def heard(text: str) -> None:
+        heard_at["speech_end"] = ears.speech_ended_at
         await hub.send({"type": "user.message", "text": text, "channel": "voice"})
 
     def should_speak() -> bool:
@@ -80,9 +85,6 @@ async def main() -> None:
         if with_chime and config.CHIME_ENABLED and preroll is None:
             await asyncio.to_thread(chime)
         ears.start(preroll=preroll, source=source)
-
-    async def on_clap() -> None:
-        await listen("clap", with_chime=True)
 
     async def on_wake(rest: np.ndarray | None) -> None:
         await listen("wake", with_chime=True, preroll=rest)
@@ -140,9 +142,6 @@ async def main() -> None:
     mic = Mic()
     mic.start()
     ears = Ears(mic, stt, loop, heard, send_state, send_level)
-
-    if config.CLAP_ENABLED:
-        ClapDetector(mic, loop, on_clap).start()
 
     if config.WAKE_ENABLED:
         wake = WakeWord(mic, loop, on_wake, is_busy=lambda: ears.busy or mouth.speaking)

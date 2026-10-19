@@ -10,13 +10,13 @@ import numpy as np
 
 from . import config
 from .mic import FRAME_MS, Mic
-from .stt import WhisperModel
+from .stt import WhisperModel, normalize
 
 log = logging.getLogger("wake")
 
 MAX_SEGMENT_S = 2.6
 END_SILENCE_MS = 320
-MIN_SPEECH_MS = 320
+MIN_SPEECH_MS = 200
 PRE_ROLL_MS = 240
 MAX_CONCENTRATION = 0.6  # >60% da energia em 30ms = clique/batida, não voz
 MIN_WORD_PROB = 0.05     # so descarta token quase nulo (a palavra e rara, a prob e baixa mesmo em fala real)
@@ -58,8 +58,8 @@ class WakeWord:
         self.is_busy = is_busy
         self.enabled = config.WAKE_ENABLED
         self.words = [_fold(w).strip() for w in config.WAKE_WORDS]
-        # "aro" e como o whisper costuma errar: arro, aru, arou, haro...
-        self._loose = re.compile(r"a+r+[ou]+")
+        # "aro" e como o whisper costuma errar: arro, aru, arou, haro, arra...
+        self._loose = re.compile(r"h?a+r+[aou]+")
         # sem initial_prompt de proposito: com "aro" no prompt o Whisper alucina "aro" em qualquer ruido
         self._model: WhisperModel | None = None
         self._pre: list[np.ndarray] = []
@@ -89,7 +89,7 @@ class WakeWord:
             self._reset()
             return
 
-        threshold = max(self.mic.noise_floor * 3.5, 0.012)
+        threshold = max(self.mic.noise_floor * 3.5, config.MIC_MIN_LEVEL)
         pre_frames = PRE_ROLL_MS // FRAME_MS
         self._pre.append(mono)
         if len(self._pre) > pre_frames:
@@ -115,6 +115,10 @@ class WakeWord:
             audio = np.concatenate(self._seg)
             speech_ms = self._speech_ms
             self._reset()
+            log.debug(
+                "segmento %dms (fala %dms, pico %.4f, limiar %.4f)",
+                len(audio) * 1000 // config.SAMPLE_RATE, speech_ms, float(np.abs(audio).max()), threshold,
+            )
             if speech_ms >= MIN_SPEECH_MS:
                 self._checking = True
                 threading.Thread(target=self._check, args=(audio,), daemon=True).start()
@@ -131,9 +135,10 @@ class WakeWord:
         try:
             # som impulsivo (tecla, clique, batida) nem vai pro modelo
             if _energy_concentration(audio) > MAX_CONCENTRATION:
+                log.debug("descartei: som impulsivo")
                 return
             segments, _ = self._model.transcribe(
-                audio,
+                normalize(audio),
                 language="pt",
                 beam_size=1,
                 word_timestamps=True,
@@ -150,6 +155,7 @@ class WakeWord:
             self._checking = False
 
         if not words or no_speech > MAX_NO_SPEECH:
+            log.debug("descartei: sem fala (no_speech=%.2f, %d palavras)", no_speech, len(words))
             return
         text = _fold(" ".join(w.word for w in words))
 
@@ -168,7 +174,7 @@ class WakeWord:
         after = audio[int((wake_end + 0.05) * config.SAMPLE_RATE) :]
         if len(after) > config.SAMPLE_RATE * 0.5:
             frame = config.SAMPLE_RATE * FRAME_MS // 1000
-            loud = sum(1 for i in range(0, len(after) - frame, frame) if np.sqrt(np.mean(after[i : i + frame] ** 2)) > 0.012)
+            loud = sum(1 for i in range(0, len(after) - frame, frame) if np.sqrt(np.mean(after[i : i + frame] ** 2)) > config.MIC_MIN_LEVEL)
             if loud * FRAME_MS >= 250:
                 rest = after
         log.info("wake: %r%s", text.strip(), " (+comando)" if rest is not None else "")

@@ -8,6 +8,7 @@ import numpy as np
 from . import config
 from .mic import FRAME_MS, Mic
 from .stt import STT
+from .stt_eleven import ScribeStream
 
 log = logging.getLogger("ears")
 
@@ -16,6 +17,7 @@ LEVEL_EVERY = 5
 HALLUCINATIONS = ("amara.org", "legendas pela comunidade", "obrigado por assistir")
 MAX_NO_SPEECH = 0.6
 MIN_LOGPROB_SHORT = -1.0  # frase de 1-2 palavras precisa de mais confiança
+SPEECH_START_MS = 100  # som sustentado pra contar como fala (respiração/eco depois do "ARO" não abre a gravação)
 
 
 class Ears:
@@ -38,6 +40,8 @@ class Ears:
         self.on_level = on_level
         self._active = False
         self._busy = False
+        self.speech_ended_at = 0.0
+        self._scribe: ScribeStream | None = None
         self._reset()
 
     @property
@@ -53,6 +57,7 @@ class Ears:
         self._frames: list[np.ndarray] = []
         self._threshold = 0.0
         self._speech_started = False
+        self._loud_frames = 0
         self._silence_frames = 0
         self._frame_count = 0
         self._started_at = 0.0
@@ -60,18 +65,22 @@ class Ears:
     def start(self, preroll: np.ndarray | None = None, follow_up: bool = False, source: str = "hotkey") -> None:
         """preroll: áudio já capturado (comando dito junto com a wake word).
         follow_up: escuta curta depois de uma resposta, sem bipe; desiste rápido se ninguém falar.
-        source: o que ativou (clap | wake | hotkey | follow_up | barge_in) — vai junto no voice.state."""
+        source: o que ativou (wake | hotkey | follow_up | barge_in) — vai junto no voice.state."""
         if self._active or self._busy:
             return
         self._reset()
-        self._threshold = max(self.mic.noise_floor * 3.5, 0.012)
+        self._threshold = max(self.mic.noise_floor * 3.5, config.MIC_MIN_LEVEL)
         self._started_at = time.monotonic()
         self._no_speech_timeout = config.FOLLOW_UP_S if follow_up else config.NO_SPEECH_TIMEOUT_S
         self.follow_up = follow_up
         self.source = "follow_up" if follow_up else source
+        # streaming: a conexão abre agora, enquanto você ainda vai começar a falar
+        self._scribe = ScribeStream(self.loop) if config.STT_ENGINE == "elevenlabs" else None
         if preroll is not None and len(preroll):
             self._frames.append(preroll.astype(np.float32))
             self._speech_started = True
+            if self._scribe:
+                self._scribe.feed(preroll)
         self._active = True
         self.mic.subscribe(self._on_frame)
         self._emit_state("hearing" if self._speech_started else "listening")
@@ -88,6 +97,8 @@ class Ears:
             return
         self._frames.append(mono)
         self._frame_count += 1
+        if self._scribe:
+            self._scribe.feed(mono)
 
         if self._frame_count % LEVEL_EVERY == 0:
             db_over = 20 * np.log10(rms / self._threshold)
@@ -96,11 +107,14 @@ class Ears:
 
         elapsed = time.monotonic() - self._started_at
         if rms > self._threshold:
-            if not self._speech_started:
+            self._loud_frames += 1
+            if not self._speech_started and self._loud_frames * FRAME_MS >= SPEECH_START_MS:
                 self._speech_started = True
                 self._emit_state("hearing")
             self._silence_frames = 0
-        elif self._speech_started:
+        elif not self._speech_started:
+            self._loud_frames = 0
+        else:
             self._silence_frames += 1
             if self._silence_frames * FRAME_MS >= config.SILENCE_MS:
                 self._schedule_finish()
@@ -123,35 +137,54 @@ class Ears:
 
         audio = np.concatenate(self._frames) if self._frames else np.zeros(0, dtype=np.float32)
         self._frames = []
+        scribe, self._scribe = self._scribe, None
         duration = len(audio) / config.SAMPLE_RATE
         if not self._speech_started or duration < 0.4:
+            if scribe:
+                scribe.cancel()
             log.info("nada ouvido")
             self._emit_state("idle")
             return
 
+        self.speech_ended_at = time.monotonic() - self._silence_frames * FRAME_MS / 1000
         self._busy = True
-        self.loop.create_task(self._transcribe(audio))
+        self.loop.create_task(self._transcribe(audio, scribe))
 
-    async def _transcribe(self, audio: np.ndarray) -> None:
+    async def _transcribe(self, audio: np.ndarray, scribe: ScribeStream | None) -> None:
         await self.on_state("transcribing", None)
+        t0 = time.monotonic()
+        text: str | None = None
+        engine = "scribe"
+        try:
+            if scribe:
+                try:
+                    text = await scribe.finish()
+                except Exception as err:  # noqa: BLE001
+                    log.warning("scribe falhou (%r), indo de whisper", err)
+            if text is None:
+                engine = "whisper"
+                text = await self._whisper(audio)
+        finally:
+            self._busy = False
+        await self.on_state("idle", None)
+        if text:
+            log.info("ouvi: %s (%s %dms)", text, engine, (time.monotonic() - t0) * 1000)
+            await self.on_text(text)
+        else:
+            log.info("transcrição vazia")
+
+    async def _whisper(self, audio: np.ndarray) -> str:
         try:
             text, no_speech, logprob = await asyncio.to_thread(self.stt.transcribe_detailed, audio)
         except Exception as err:  # noqa: BLE001
             log.warning("transcrição falhou: %s", err)
-            text, no_speech, logprob = "", 1.0, -9.0
-        finally:
-            self._busy = False
-        await self.on_state("idle", None)
+            return ""
         if any(junk in text.lower() for junk in HALLUCINATIONS):
-            text = ""
+            return ""
         if text and (no_speech > MAX_NO_SPEECH or (len(text.split()) <= 2 and logprob < MIN_LOGPROB_SHORT)):
             log.info("descartei transcrição duvidosa: %r (no_speech=%.2f, logprob=%.2f)", text, no_speech, logprob)
-            text = ""
-        if text:
-            log.info("ouvi: %s", text)
-            await self.on_text(text)
-        else:
-            log.info("transcrição vazia")
+            return ""
+        return text
 
     def _emit(self, fn, value) -> None:
         asyncio.run_coroutine_threadsafe(fn(value), self.loop)

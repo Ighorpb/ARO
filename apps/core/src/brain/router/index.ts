@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { Channel, TranscriptEntry } from "@aro/shared";
 import { classify } from "./classifier";
 import { routeByRules } from "./rules";
-import { CLASSIFIER_MODEL, FORCED_TIER, TIERS, type Tier } from "./tiers";
+import { CLASSIFIER_MODEL, FORCED_TIER, profileFor, type Tier } from "./tiers";
 import { costOf } from "../pricing";
 
 export type RouteSource = "forced" | "rule" | "classifier" | "fallback" | "voice";
@@ -20,14 +20,14 @@ const VOICE_SHORT_LEN = 60;
 
 /** Regras primeiro (0ms). Sem match → classificador. Erro/timeout → main. */
 export async function route(client: Anthropic, text: string, recent: TranscriptEntry[], channel: Channel = "text"): Promise<Route> {
-  if (FORCED_TIER) return { tier: FORCED_TIER, model: TIERS[FORCED_TIER].model, source: "forced", costUsd: 0 };
+  if (FORCED_TIER) return { tier: FORCED_TIER, model: profileFor(FORCED_TIER, channel).model, source: "forced", costUsd: 0 };
 
   const byRule = routeByRules(text);
-  if (byRule) return { tier: byRule, model: TIERS[byRule].model, source: "rule", costUsd: 0 };
+  if (byRule) return { tier: byRule, model: profileFor(byRule, channel).model, source: "rule", costUsd: 0 };
 
   // fala curta: pula o classificador (latência) — quase sempre é coisa simples
   if (channel === "voice" && text.trim().length <= VOICE_SHORT_LEN) {
-    return { tier: "fast", model: TIERS.fast.model, source: "voice", costUsd: 0 };
+    return { tier: "fast", model: profileFor("fast", channel).model, source: "voice", costUsd: 0 };
   }
 
   try {
@@ -39,14 +39,14 @@ export async function route(client: Anthropic, text: string, recent: TranscriptE
     ]);
     return {
       tier: decision.tier,
-      model: TIERS[decision.tier].model,
+      model: profileFor(decision.tier, channel).model,
       source: "classifier",
       reason: decision.reason,
       costUsd: costOf(CLASSIFIER_MODEL, decision.usage, "5m"),
     };
   } catch (err) {
     console.warn("[router] classificador falhou, indo de main:", (err as Error).message);
-    return { tier: "main", model: TIERS.main.model, source: "fallback", costUsd: 0 };
+    return { tier: "main", model: profileFor("main", channel).model, source: "fallback", costUsd: 0 };
   }
 }
 

@@ -44,9 +44,9 @@ export function App() {
   // ── abre sozinho quando ativado; volta pro canto quando termina ──
   const autoExpanded = useRef(false);
   const lastEntry = aro.entries.at(-1);
-  // palma e atalho são deliberados: abre já no listening. Wake word pode ser alucinação do Whisper,
+  // atalho é deliberado: abre já no listening. Wake word pode ser alucinação do Whisper,
   // então fica no canto até virar hearing (fala de verdade)
-  const deliberate = aro.voiceState === "listening" && (aro.voiceSource === "clap" || aro.voiceSource === "hotkey");
+  const deliberate = aro.voiceState === "listening" && aro.voiceSource === "hotkey";
   const engaged =
     deliberate ||
     aro.voiceState === "hearing" ||

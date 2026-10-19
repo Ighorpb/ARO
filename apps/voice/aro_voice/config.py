@@ -20,13 +20,19 @@ _load_dotenv(ROOT.parent.parent / ".env")
 
 HUB_URL = os.environ.get("ARO_HUB_URL", f"ws://localhost:{os.environ.get('ARO_PORT', '7777')}")
 
-# Nível de log da voz: info | debug (debug mostra rms de cada impulso — útil pra calibrar palma)
+# Nível de log da voz: info | debug
 LOG_LEVEL = os.environ.get("ARO_LOG", "info").upper()
 
-# STT
+# ElevenLabs: com chave, vira o ouvido (Scribe Realtime) e a boca (Flash) principais
+ELEVEN_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+ELEVEN_VOICE = os.environ.get("ARO_ELEVEN_VOICE", "kd1lRcSdRGIfyKxQKjmH")  # Ale Garcia (PT-BR)
+ELEVEN_MODEL = os.environ.get("ARO_ELEVEN_MODEL", "eleven_flash_v2_5")
+
+# STT: elevenlabs (streaming, texto ~0.3s depois que você para) | whisper (local, fallback)
+STT_ENGINE = os.environ.get("ARO_STT", "elevenlabs" if ELEVEN_API_KEY else "whisper")
 WHISPER_MODEL = os.environ.get("ARO_WHISPER_MODEL", "large-v3-turbo")
 WHISPER_DEVICE = os.environ.get("ARO_WHISPER_DEVICE", "auto")  # auto | cuda | cpu
-WHISPER_BEAM = int(os.environ.get("ARO_WHISPER_BEAM", "3"))
+WHISPER_BEAM = int(os.environ.get("ARO_WHISPER_BEAM", "1"))
 # Contexto pro Whisper: nomes e termos que voce usa (melhora reconhecimento)
 WHISPER_PROMPT = os.environ.get(
     "ARO_WHISPER_PROMPT",
@@ -34,10 +40,11 @@ WHISPER_PROMPT = os.environ.get(
 )
 SAMPLE_RATE = 16000
 
-# Detecção de fala por energia
-SILENCE_MS = int(os.environ.get("ARO_SILENCE_MS", "700"))
+# Detecção de fala por energia. Nível mínimo (RMS) que conta como voz — mic com ganho baixo precisa de menos
+MIC_MIN_LEVEL = float(os.environ.get("ARO_MIC_MIN_LEVEL", "0.006"))
+SILENCE_MS = int(os.environ.get("ARO_SILENCE_MS", "500"))
 MAX_RECORD_S = int(os.environ.get("ARO_MAX_RECORD_S", "30"))
-# Ativou (palma/wake/atalho) e ninguém falou: desiste depois disso
+# Ativou (wake/atalho) e ninguém falou: desiste depois disso
 NO_SPEECH_TIMEOUT_S = float(os.environ.get("ARO_NO_SPEECH_S", "4"))
 # Conversa continua: depois de responder, fica ouvindo esse tanto sem precisar ativar (0 = off)
 FOLLOW_UP_S = float(os.environ.get("ARO_FOLLOW_UP_S", "4"))
@@ -55,16 +62,11 @@ SPEAK_MODE = os.environ.get("ARO_SPEAK", "always")
 INPUT_DEVICE = os.environ.get("ARO_INPUT_DEVICE", "")
 OUTPUT_DEVICE = os.environ.get("ARO_OUTPUT_DEVICE", "")
 
-# Palmas: N palmas seguidas ativam a escuta. Sensibilidade >1 = mais sensível.
-CLAP_ENABLED = os.environ.get("ARO_CLAP", "on").lower() in ("on", "1", "true", "yes")
-CLAP_COUNT = int(os.environ.get("ARO_CLAP_COUNT", "2"))
-CLAP_SENSITIVITY = float(os.environ.get("ARO_CLAP_SENSITIVITY", "1.0"))
-
-# Bipe curto quando ativa por palma
+# Bipe curto quando ativa pela wake word
 CHIME_ENABLED = os.environ.get("ARO_CHIME", "on").lower() in ("on", "1", "true", "yes")
 
-# Motor de voz: edge (Microsoft, precisa internet, Kokoro assume se cair) | kokoro (local)
-TTS_ENGINE = os.environ.get("ARO_TTS", "edge")
+# Motor de voz: elevenlabs (Edge assume se cair) | edge (Microsoft, Kokoro assume se cair) | kokoro (local)
+TTS_ENGINE = os.environ.get("ARO_TTS", "elevenlabs" if ELEVEN_API_KEY else "edge")
 EDGE_VOICE = os.environ.get("ARO_EDGE_VOICE", "pt-BR-AntonioNeural")
 EDGE_RATE = os.environ.get("ARO_EDGE_RATE", "+12%")
 EDGE_PITCH = os.environ.get("ARO_EDGE_PITCH", "+0Hz")
@@ -75,7 +77,7 @@ BARGE_IN = os.environ.get("ARO_BARGE_IN", "off").lower() in ("on", "1", "true", 
 BARGE_IN_LEVEL = float(os.environ.get("ARO_BARGE_IN_LEVEL", "0.45"))
 BARGE_IN_MS = int(os.environ.get("ARO_BARGE_IN_MS", "350"))
 
-# Wake word: fala "ARO" em vez de bater palma. Detector = Whisper tiny na GPU.
+# Wake word: fala "ARO" pra ativar. Detector = Whisper na GPU.
 WAKE_ENABLED = os.environ.get("ARO_WAKE", "on").lower() in ("on", "1", "true", "yes")
 WAKE_MODEL = os.environ.get("ARO_WAKE_MODEL", "base")
 WAKE_WORDS = [w.strip() for w in os.environ.get("ARO_WAKE_WORDS", "aro,arô").split(",") if w.strip()]

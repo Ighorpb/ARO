@@ -11,7 +11,7 @@ interface Props {
 
 const VOICE_TITLE: Record<VoiceState, string> = {
   off: "Voz desligada. Sobe com pnpm dev:voice",
-  idle: "Falar com o ARO (Ctrl+Shift+Espaço ou duas palmas)",
+  idle: "Falar com o ARO (Ctrl+Shift+Espaço ou diga ARO)",
   listening: "Ouvindo. Clica de novo pra parar",
   hearing: "Ouvindo. Clica de novo pra parar",
   transcribing: "Transcrevendo",
